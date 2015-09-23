@@ -53,13 +53,6 @@ class PHP_CodeCoverage
     private $addUncoveredFilesFromWhitelist = true;
 
     /**
-     * @var bool
-     *
-     * @deprecated
-     */
-    private $processUncoveredFilesFromWhitelist = false;
-
-    /**
      * @var mixed
      */
     private $currentId;
@@ -469,22 +462,6 @@ class PHP_CodeCoverage
         }
 
         $this->addUncoveredFilesFromWhitelist = $flag;
-    }
-
-    /**
-     * @param  bool                                      $flag
-     * @throws PHP_CodeCoverage_InvalidArgumentException
-     */
-    public function setProcessUncoveredFilesFromWhitelist($flag)
-    {
-        if (!is_bool($flag)) {
-            throw PHP_CodeCoverage_InvalidArgumentException::create(
-                1,
-                'boolean'
-            );
-        }
-
-        $this->processUncoveredFilesFromWhitelist = $flag;
     }
 
     /**
