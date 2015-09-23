@@ -93,7 +93,7 @@ class PHP_CodeCoverage
      *
      * @var array
      */
-    private $uncoveredFiles = array();
+    private $uncoveredFiles = [];
 
     /**
      * Constructor.
@@ -583,7 +583,9 @@ class PHP_CodeCoverage
     private function initializeFilesThatAreSeenTheFirstTime(array $data)
     {
         foreach ($data as $file => $lines) {
-            if ($this->filter->isFile($file) && !isset($this->data[$file]) && !$this->filter()->isFiltered($file)) {
+            if ($this->filter->isFile($file) &&
+                !isset($this->data[$file]) &&
+                !$this->filter()->isFiltered($file)) {
                 $this->data[$file] = [];
 
                 foreach ($lines as $k => $v) {
