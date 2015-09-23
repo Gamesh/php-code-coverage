@@ -54,6 +54,8 @@ class PHP_CodeCoverage
 
     /**
      * @var bool
+     *
+     * @deprecated
      */
     private $processUncoveredFilesFromWhitelist = false;
 
@@ -87,6 +89,13 @@ class PHP_CodeCoverage
     private $tests = [];
 
     /**
+     * Store all uncovered files
+     *
+     * @var array
+     */
+    private $uncoveredFiles = array();
+
+    /**
      * Constructor.
      *
      * @param  PHP_CodeCoverage_Driver           $driver
@@ -105,6 +114,8 @@ class PHP_CodeCoverage
 
         $this->driver = $driver;
         $this->filter = $filter;
+
+        $this->initData();
     }
 
     /**
@@ -213,7 +224,7 @@ class PHP_CodeCoverage
 
         $this->currentId = $id;
 
-        $this->driver->start();
+        $this->driver->start(false);
     }
 
     /**
@@ -243,6 +254,12 @@ class PHP_CodeCoverage
 
         $data = $this->driver->stop();
         $this->append($data, null, $append, $linesToBeCovered, $linesToBeUsed);
+
+        foreach (array_keys($data) as $file) {
+            if (isset($this->uncoveredFiles[$file])) {
+                unset($this->uncoveredFiles[$file]);
+            }
+        }
 
         $this->currentId = null;
 
@@ -566,7 +583,7 @@ class PHP_CodeCoverage
     private function initializeFilesThatAreSeenTheFirstTime(array $data)
     {
         foreach ($data as $file => $lines) {
-            if ($this->filter->isFile($file) && !isset($this->data[$file])) {
+            if ($this->filter->isFile($file) && !isset($this->data[$file]) && !$this->filter()->isFiltered($file)) {
                 $this->data[$file] = [];
 
                 foreach ($lines as $k => $v) {
@@ -581,60 +598,13 @@ class PHP_CodeCoverage
      */
     private function addUncoveredFilesFromWhitelist()
     {
-        $data           = [];
-        $uncoveredFiles = array_diff(
-            $this->filter->getWhitelist(),
-            array_keys($this->data)
-        );
+        $data = [];
 
-        foreach ($uncoveredFiles as $uncoveredFile) {
-            if (!file_exists($uncoveredFile)) {
-                continue;
-            }
-
-            if ($this->processUncoveredFilesFromWhitelist) {
-                $this->processUncoveredFileFromWhitelist(
-                    $uncoveredFile,
-                    $data,
-                    $uncoveredFiles
-                );
-            } else {
-                $data[$uncoveredFile] = [];
-
-                $lines = count(file($uncoveredFile));
-
-                for ($i = 1; $i <= $lines; $i++) {
-                    $data[$uncoveredFile][$i] = PHP_CodeCoverage_Driver::LINE_NOT_EXECUTED;
-                }
-            }
+        foreach (array_keys($this->uncoveredFiles) as $file) {
+            $data[$file] = $this->data[$file];
         }
 
         $this->append($data, 'UNCOVERED_FILES_FROM_WHITELIST');
-    }
-
-    /**
-     * @param string $uncoveredFile
-     * @param array  $data
-     * @param array  $uncoveredFiles
-     */
-    private function processUncoveredFileFromWhitelist($uncoveredFile, array &$data, array $uncoveredFiles)
-    {
-        $this->driver->start();
-        include_once $uncoveredFile;
-        $coverage = $this->driver->stop();
-
-        foreach ($coverage as $file => $fileCoverage) {
-            if (!isset($data[$file]) &&
-                in_array($file, $uncoveredFiles)) {
-                foreach (array_keys($fileCoverage) as $key) {
-                    if ($fileCoverage[$key] == PHP_CodeCoverage_Driver::LINE_EXECUTED) {
-                        $fileCoverage[$key] = PHP_CodeCoverage_Driver::LINE_NOT_EXECUTED;
-                    }
-                }
-
-                $data[$file] = $fileCoverage;
-            }
-        }
     }
 
     /**
@@ -907,6 +877,24 @@ class PHP_CodeCoverage
             return new PHP_CodeCoverage_Driver_PHPDBG;
         } else {
             return new PHP_CodeCoverage_Driver_Xdebug;
+        }
+    }
+
+    /**
+     * Initialise the data with the executable/dead lines from each file in the whitelist
+     */
+    private function initData()
+    {
+        foreach ($this->filter()->getWhitelist() as $file) {
+            $this->driver->start();
+            include_once($file);
+            $data = $this->driver->stop();
+
+            $this->initializeFilesThatAreSeenTheFirstTime($data);
+        }
+
+        foreach (array_keys($this->data) as $file) {
+            $this->uncoveredFiles[$file] = 1;
         }
     }
 }
