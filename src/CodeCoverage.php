@@ -53,6 +53,11 @@ class PHP_CodeCoverage
     private $addUncoveredFilesFromWhitelist = true;
 
     /**
+     * @var bool
+     */
+    private $processUncoveredFilesFromWhitelist = false;
+
+    /**
      * @var mixed
      */
     private $currentId;
@@ -82,13 +87,6 @@ class PHP_CodeCoverage
     private $tests = [];
 
     /**
-     * Store all uncovered files
-     *
-     * @var array
-     */
-    private $uncoveredFiles = [];
-
-    /**
      * Constructor.
      *
      * @param  PHP_CodeCoverage_Driver           $driver
@@ -107,8 +105,6 @@ class PHP_CodeCoverage
 
         $this->driver = $driver;
         $this->filter = $filter;
-
-        $this->initData();
     }
 
     /**
@@ -155,9 +151,7 @@ class PHP_CodeCoverage
      */
     public function getData($raw = false)
     {
-        if (!$raw && $this->addUncoveredFilesFromWhitelist) {
-            $this->addUncoveredFilesFromWhitelist();
-        }
+        $this->processUncoveredLines($raw);
 
         return $this->data;
     }
@@ -248,12 +242,6 @@ class PHP_CodeCoverage
         $data = $this->driver->stop();
         $this->append($data, null, $append, $linesToBeCovered, $linesToBeUsed);
 
-        foreach (array_keys($data) as $file) {
-            if (isset($this->uncoveredFiles[$file])) {
-                unset($this->uncoveredFiles[$file]);
-            }
-        }
-
         $this->currentId = null;
 
         return $data;
@@ -280,7 +268,6 @@ class PHP_CodeCoverage
         }
 
         $this->applyListsFilter($data);
-        $this->applyIgnoredLinesFilter($data);
         $this->initializeFilesThatAreSeenTheFirstTime($data);
 
         if (!$append) {
@@ -468,6 +455,22 @@ class PHP_CodeCoverage
      * @param  bool                                      $flag
      * @throws PHP_CodeCoverage_InvalidArgumentException
      */
+    public function setProcessUncoveredFilesFromWhitelist($flag)
+    {
+        if (!is_bool($flag)) {
+            throw PHP_CodeCoverage_InvalidArgumentException::create(
+                1,
+                'boolean'
+            );
+        }
+
+        $this->processUncoveredFilesFromWhitelist = $flag;
+    }
+
+    /**
+     * @param  bool                                      $flag
+     * @throws PHP_CodeCoverage_InvalidArgumentException
+     */
     public function setDisableIgnoredLines($flag)
     {
         if (!is_bool($flag)) {
@@ -536,24 +539,6 @@ class PHP_CodeCoverage
     }
 
     /**
-     * Applies the "ignored lines" filtering.
-     *
-     * @param array $data
-     */
-    private function applyIgnoredLinesFilter(array &$data)
-    {
-        foreach (array_keys($data) as $filename) {
-            if (!$this->filter->isFile($filename)) {
-                continue;
-            }
-
-            foreach ($this->getLinesToBeIgnored($filename) as $line) {
-                unset($data[$filename][$line]);
-            }
-        }
-    }
-
-    /**
      * @param array $data
      * @since Method available since Release 1.1.0
      */
@@ -570,20 +555,6 @@ class PHP_CodeCoverage
                 }
             }
         }
-    }
-
-    /**
-     * Processes whitelisted files that are not covered.
-     */
-    private function addUncoveredFilesFromWhitelist()
-    {
-        $data = [];
-
-        foreach (array_keys($this->uncoveredFiles) as $file) {
-            $data[$file] = $this->data[$file];
-        }
-
-        $this->append($data, 'UNCOVERED_FILES_FROM_WHITELIST');
     }
 
     /**
@@ -860,20 +831,60 @@ class PHP_CodeCoverage
     }
 
     /**
-     * Initialise the data with the executable/dead lines from each file in the whitelist
+     * Determine uncovered lines
      */
-    private function initData()
+    private function processUncoveredLines($raw = false)
     {
-        foreach ($this->filter()->getWhitelist() as $file) {
-            $this->driver->start();
-            include_once($file);
-            $data = $this->driver->stop();
-
-            $this->initializeFilesThatAreSeenTheFirstTime($data);
+        if (!$raw && $this->addUncoveredFilesFromWhitelist) {
+            $filesToProcess = $this->filter()->getWhitelist();
+        } else {
+            $filesToProcess = array_keys($this->data);
         }
 
-        foreach (array_keys($this->data) as $file) {
-            $this->uncoveredFiles[$file] = 1;
+        $coverageData = $this->data;
+        $this->data = [];
+
+        foreach ($filesToProcess as $file) {
+
+            if (!file_exists($file)) {
+                continue;
+            }
+
+            $isCoveredFile = isset($this->data[$file]);
+            $data = [];
+
+            // If we have coverage data, or we are allowed to process uncovered files
+            if ($isCoveredFile || $this->processUncoveredFilesFromWhitelist) {
+                $this->driver->start();
+                include_once($file);
+                $data = $this->driver->stop();
+
+            } else {
+                $lines = count(file($file));
+
+                for ($i = 1; $i <= $lines; $i++) {
+                    $data[$file][$i] = PHP_CodeCoverage_Driver::LINE_NOT_EXECUTED;
+                }
+            }
+
+            $this->initializeFilesThatAreSeenTheFirstTime($data);
+
+            if (!$isCoveredFile) {
+                // If it is an uncovered file, just append the data
+                $this->append($data, 'UNCOVERED_FILES_FROM_WHITELIST');
+            }
+        }
+
+        foreach ($coverageData as $file => $lines) {
+            foreach ($lines as $k => $v) {
+                $this->data[$file][$k] = $v;
+            }
+        }
+
+        foreach ($this->data as $file => $lines) {
+            foreach ($this->getLinesToBeIgnored($file) as $line) {
+                unset($this->data[$file][$line]);
+            }
         }
     }
 }
