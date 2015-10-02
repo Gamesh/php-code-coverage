@@ -195,6 +195,28 @@ class PHP_CodeCoverageTest extends PHP_CodeCoverage_TestCase
     }
 
     /**
+     * @covers            PHP_CodeCoverage::setProcessUncoveredFilesFromWhitelist
+     * @expectedException PHP_CodeCoverage_Exception
+     */
+    public function testSetProcessUncoveredFilesFromWhitelistThrowsExceptionForInvalidArgument()
+    {
+        $this->coverage->setProcessUncoveredFilesFromWhitelist(null);
+    }
+
+    /**
+     * @covers PHP_CodeCoverage::setProcessUncoveredFilesFromWhitelist
+     */
+    public function testSetProcessUncoveredFilesFromWhitelist()
+    {
+        $this->coverage->setProcessUncoveredFilesFromWhitelist(true);
+        $this->assertAttributeEquals(
+            true,
+            'processUncoveredFilesFromWhitelist',
+            $this->coverage
+        );
+    }
+
+    /**
      * @covers PHP_CodeCoverage::setMapTestClassNameToCoveredClassName
      */
     public function testSetMapTestClassNameToCoveredClassName()
